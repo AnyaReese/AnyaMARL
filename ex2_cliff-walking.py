@@ -1,14 +1,16 @@
 import gym
 import numpy as np
+
+np.bool = np.bool_
 from collections import deque
 import matplotlib.pyplot as plt
 from tqdm import trange
 
 
 class Configs:
-    def __init__(self, 
-                 env, 
-                 max_timestep=300, 
+    def __init__(self,
+                 env,
+                 max_timestep=300,
                  num_episode=10000,
                  plot_every=100,
                  alpha=0.4,
@@ -29,11 +31,11 @@ class Configs:
 
 def update_q_value(q, q_next, reward, alpha, gamma):
     """
-    TODO: 
+    TODO:
     Please fill in the blank for variable 'td_target'
     according to the definition of the TD method
     """
-    td_target = None
+    td_target = reward + gamma * q_next
     return q + alpha * (td_target - q)
 
 
@@ -61,7 +63,7 @@ def sarsa(env, config):
 
         prob = epsilon_greedy(q_values[state], 1, config.epsilon)
         action = np.random.choice(action_set, p=prob)
-        
+
         for timestep in np.arange(config.max_timestep):
             env_feedbacks = env.step(action)
             next_state, reward, done = env_feedbacks[0], env_feedbacks[1], env_feedbacks[2]
@@ -72,31 +74,31 @@ def sarsa(env, config):
             next_action = np.random.choice(action_set, p=next_prob)
 
             """
-            TODO: 
+            TDOO:
             Please fill in the blank for variable 'next_q_value'
             according to the definition of the SARSA algorithm
             """
-            next_q_value = None
+            next_q_value = q_values[next_state, next_action]
             q_values[state, action] = update_q_value(
-                q_values[state, action], 
-                0 if done else next_q_value, 
+                q_values[state, action],
+                0 if done else next_q_value,
                 reward, config.alpha, config.gamma)
 
-            if done:break
+            if done: break
 
             state, action = next_state, next_action
 
         scores.append(reward_sum)
-                
+
         if episode % config.plot_every == 0:
             avg_scores.append(np.mean(scores))
-    
+
     plt.plot(np.linspace(0, config.num_episode, len(avg_scores), endpoint=False), avg_scores, label="SARSA")
     plt.xlabel('Episode Number')
     plt.ylabel(f'Average Reward (Over Next {config.plot_every} Episodes)')
 
     print(f"Best Average Reward over {config.plot_every} Episodes: ", np.max(scores))
-        
+
     return q_values
 
 
@@ -116,8 +118,8 @@ def q_learning(env, config):
 
         prob = epsilon_greedy(q_values[state], episode, config.epsilon)
         action = np.random.choice(action_set, p=prob)
-        
-        for timestep in np.arange(config.max_timestep):        
+
+        for timestep in np.arange(config.max_timestep):
             env_feedbacks = env.step(action)
             next_state, reward, done = env_feedbacks[0], env_feedbacks[1], env_feedbacks[2]
 
@@ -130,36 +132,36 @@ def q_learning(env, config):
             Please fill in the blank for variable 'next_q_value'
             according to the definition of the Q-learning algorithm
             """
-            next_q_value = None
+            next_q_value = np.max(q_values[next_state])
             q_values[state, action] = update_q_value(
-                    q_values[state, action], 
-                    0 if done else next_q_value,
-                    reward, config.alpha, config.gamma)
+                q_values[state, action],
+                0 if done else next_q_value,
+                reward, config.alpha, config.gamma)
 
-            if done:break
-                
+            if done: break
+
             state, action = next_state, next_action
 
         scores.append(reward_sum)
-                        
+
         if episode % config.plot_every == 0:
             avg_scores.append(np.mean(scores))
-    
+
     plt.plot(np.linspace(0, config.num_episode, len(avg_scores), endpoint=False), avg_scores, label="Q-learning")
     plt.xlabel('Episode Number')
     plt.ylabel(f'Average Reward (Over Next {config.plot_every} Episodes)')
-    
+
     print(f"Best Average Reward over {config.plot_every} Episodes: ", np.max(scores))
 
 
 if __name__ == "__main__":
-    #env = gym.make('CliffWalking-v0')
+    # env = gym.make('CliffWalking-v0')
     env = gym.make('CliffWalking-v0')
     print(env.action_space)
     print(env.observation_space)
 
     config = Configs(env, max_timestep=200, num_episode=10000, plot_every=100)
-    
+
     # train the Q-learning and SARSA agent
     q_learning(env, config)
     sarsa(env, config)
