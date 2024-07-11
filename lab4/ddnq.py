@@ -13,7 +13,12 @@ from replaybuffer import ReplayBuffer
 class QNetwork(nn.Module):
     def __init__(self, env):
         super().__init__()
-
+        '''
+        定义一个三层神经网络，其中
+        输入层：全连接层： 状态空间作为输入，256作为输出，Relu激活函数
+        中间层：全连接层：256输入256输出，Relu激活
+        输出层：全连接层：256输入，动作空间输出
+        '''
         self.network = nn.Sequential(
             nn.Linear(env.observation_space.shape[0], 256), nn.ReLU(),
             nn.Linear(256, 256), nn.ReLU(),
@@ -21,21 +26,24 @@ class QNetwork(nn.Module):
         )
 
     def forward(self, x):
+        """
+        前向计算
+        """
         return self.network(x)
 
 
 if __name__ == "__main__":
     # Parameters
     learning_rate = 3e-4
-    buffer_size = int(1e5)
+    buffer_size = int(1e6)
     total_timesteps = int(1e6)
     epsilon = 0.01
     gamma = 0.99
     tau = 1.0
 
-    learning_starts = 10000
+    learning_starts = 80000
     train_frequency = 4
-    log_frequency = 500
+    log_frequency = 50
     target_frequency = 1000
     batch_size = 256
 
@@ -44,6 +52,11 @@ if __name__ == "__main__":
     env = gym.make("ALE/Freeway-v5", obs_type="ram")
     eval_env = gym.make("ALE/Freeway-v5", obs_type="ram")
 
+    '''
+    DONE
+    定义两个网络，分别为q_network,以及target_network；
+    定义优化器，训练网络
+    '''
     q_network = QNetwork(env).to(device)
     target_network = copy.deepcopy(q_network)
     optimizer = optim.Adam(q_network.parameters(), lr=learning_rate)
@@ -55,14 +68,14 @@ if __name__ == "__main__":
     total_reward = 0
     for step in range(total_timesteps):
 
-        # Epsilon greedy
+        '''
+        DONE
+        实现epsilon-greedy算法，epsilon为给定超参
+        '''
         if random.random() < epsilon:
             actions = env.action_space.sample()
-
         else:
-
-            q_values = q_network(torch.tensor(obs, device=device, dtype=torch.float32).unsqueeze(dim=0))
-            actions = torch.argmax(q_values, dim=1).cpu().numpy()
+            actions = q_network(torch.tensor(obs, dtype=torch.float32).to(device)).argmax().item()
 
         if type(actions) == np.ndarray:
             actions = actions.item()
@@ -84,9 +97,19 @@ if __name__ == "__main__":
             if step % train_frequency == 0:
                 data = buffer.sample(batch_size)
                 buffer_obs, act, next_buffer_obs, rew, cont = data
+
+                '''
+                DONE
+                计算td_target
+                Q(s,a) (old_val)
+                '''
                 with torch.no_grad():
-                    target_max = target_network(next_buffer_obs).max(dim=1, keepdim=True)[0]
-                    td_target = rew + gamma * target_max * cont
+                    # 使用当前网络选择最佳动作
+                    current_actions = q_network(next_buffer_obs).max(dim=1, keepdim=True)[1]
+                    # 使用目标网络评估这些动作的Q值
+                    target_values = target_network(next_buffer_obs).gather(1, current_actions)
+                    td_target = rew + gamma * target_values * cont
+
                 old_val = q_network(buffer_obs).gather(1, act)
                 loss = F.mse_loss(td_target, old_val)
 
@@ -109,3 +132,5 @@ if __name__ == "__main__":
                     target_param.data.copy_(tau * param.data + (1.0 - tau) * target_param.data)
 
     env.close()
+    model_path = f"Freeway-runs/DDQN.pt"
+    torch.save(q_network.state_dict(), model_path)

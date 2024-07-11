@@ -19,11 +19,17 @@ class QNetwork(nn.Module):
         中间层：全连接层：256输入256输出，Relu激活
         输出层：全连接层：256输入，动作空间输出
         '''
+        self.network = nn.Sequential(
+            nn.Linear(env.observation_space.shape[0], 256), nn.ReLU(),
+            nn.Linear(256, 256), nn.ReLU(),
+            nn.Linear(256, env.action_space.n),
+        )
 
     def forward(self, x):
-        '''
+        """
         前向计算
-        '''
+        """
+        return self.network(x)
 
 
 if __name__ == "__main__":
@@ -45,16 +51,15 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     env = gym.make("ALE/Freeway-v5", obs_type="ram")
     eval_env = gym.make("ALE/Freeway-v5", obs_type="ram")
-   
+
     '''
+    DONE
     定义两个网络，分别为q_network,以及target_network；
     定义优化器，训练网络
     '''
-    q_network = None
-    target_network = None
-    optimizer = None
-
-
+    q_network = QNetwork(env).to(device)
+    target_network = copy.deepcopy(q_network)
+    optimizer = optim.Adam(q_network.parameters(), lr=learning_rate)
 
     buffer = ReplayBuffer(env.observation_space.shape[0], env.action_space.n, buffer_size, device)
 
@@ -64,14 +69,16 @@ if __name__ == "__main__":
     for step in range(total_timesteps):
 
         '''
+        DONE
         实现epsilon-greedy算法，epsilon为给定超参
         '''
-        
-        
-        
+        if random.random() < epsilon:
+            actions = env.action_space.sample()
+        else:
+            actions = q_network(torch.tensor(obs, dtype=torch.float32).to(device)).argmax().item()
+
         if type(actions) == np.ndarray:
             actions = actions.item()
-
 
         next_obs, rewards, terminations, truncations, infos = env.step(actions)
         total_reward += rewards
@@ -92,22 +99,24 @@ if __name__ == "__main__":
                 buffer_obs, act, next_buffer_obs, rew, cont = data
 
                 '''
+                DONE
                 计算td_target
                 Q(s,a) (old_val)
                 '''
                 with torch.no_grad():
-                    target_max = None
-                    td_target = None
-                old_val = None
-
-
+                    target_max = target_network(next_buffer_obs).max(dim=1, keepdim=True)[0]
+                    td_target = rew + gamma * target_max * cont
+                old_val = q_network(buffer_obs).gather(1, act)
                 loss = F.mse_loss(td_target, old_val)
 
                 if step % log_frequency == 0:
                     # wandb.log({"td_loss": loss.item(), "q_values": old_val.mean().item()}, step=step)
-                    print('td_loss: {}\t q_values: {}\t step: {}, avg_rewards: {}'.format(loss.item(), old_val.mean().item(), step, np.mean(total_rewards[-100:])))
+                    print('td_loss: {}\t q_values: {}\t step: {}, avg_rewards: {}'.format(loss.item(),
+                                                                                          old_val.mean().item(), step,
+                                                                                          np.mean(
+                                                                                              total_rewards[-100:])))
                     pass
-                
+
                 # optimize the model
                 optimizer.zero_grad()
                 loss.backward()
